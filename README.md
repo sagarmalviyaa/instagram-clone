@@ -1,4 +1,5 @@
-# Instagram Clone Project - MAIN BRANCH
+
+# Instagram Clone Project - MAIN DEMO BRANCH
 
 ## Overview
 
