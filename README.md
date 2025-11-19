@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 
 # Instagram Clone Project - MAIN DEMO BRANCH
+=======
+# Instagram Clone Project - DEMO BRANCH
+>>>>>>> 80a0f94c653fac0fedb46cda229b3eced19a65c9
 
 ## Overview
 
