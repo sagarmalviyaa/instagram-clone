@@ -26,7 +26,7 @@ This repository contains the code for an Instagram clone project developed by Sa
 ## Installation
 
 ```bash
-# Clone the repository : test jenkins
+# Clone the repository : test jenkins 2
 git clone https://github.com/username/instagram-clone.git
 
 # Navigate to the project directory
