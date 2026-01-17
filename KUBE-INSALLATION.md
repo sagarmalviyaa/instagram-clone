@@ -159,6 +159,12 @@ sudo kubeadm init \
 * Initializes etcd, API server, scheduler, and controller-manager
 * `pod-network-cidr` must match the CNI configuration
 * Save the `kubeadm join` command printed at the end
+* If you lost this join command. Then,
+
+```bash
+kubeadm token create --print-join-command
+#use sudo to give root permission
+```
 
 ---
 
