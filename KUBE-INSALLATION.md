@@ -37,12 +37,12 @@ Every command is followed by a clear explanation of **what it does** and **why i
 ```bash
 # On master node
 sudo hostnamectl set-hostname master-node
-echo 'export PS1="[$(hostname --static)@\w]\\$ "' >> ~/.bashrc && \
+echo 'export PS1="[$(hostnamectl --static)@\w]\\$ "' >> ~/.bashrc && \
 source ~/.bashrc
 
 # On worker nodes
 sudo hostnamectl set-hostname worker-1
-echo 'export PS1="[$(hostname --static)@\w]\\$ "' >> ~/.bashrc && \
+echo 'export PS1="[$(hostnamectl --static)@\w]\\$ "' >> ~/.bashrc && \
 source ~/.bashrc
 ```
 
