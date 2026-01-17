@@ -6,6 +6,7 @@ This version uses the modern, recommended approach:
 - Official `pkgs.k8s.io` repositories
 - Calico with the Tigera operator as the CNI (network plugin)
 Every command (or group of commands) is followed by a clear, beginner-friendly explanation of **what it does** and **why it's needed**. The guide is structured to work 100% on a multi-node setup (1 master/control-plane node + 1 or more worker nodes).
+
 **Prerequisites** (All Nodes)
 1. Ubuntu 22.04 LTS or 24.04 LTS (clean install recommended)
 2. At least 2 nodes: 1 master (minimum 2 CPUs, 4 GB RAM) + 1 or more workers (minimum 2 CPUs, 2 GB RAM each)
@@ -13,6 +14,7 @@ Every command (or group of commands) is followed by a clear, beginner-friendly e
 4. Unique hostnames on each node (e.g., `master-node`, `worker-1`)
 5. sudo/root access
 6. Internet access for downloading packages
+
 **Recommended**: Set hostnames before starting
 ```bash
 # On master node
@@ -20,7 +22,9 @@ sudo hostnamectl set-hostname master-node
 # On each worker node (use different names)
 sudo hostnamectl set-hostname worker-1
 ```
+
 **Step 1: Common Setup on ALL Nodes** (Master + Workers)
+
 **1.1 Update system and install basic tools**
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -28,6 +32,7 @@ sudo apt install -y apt-transport-https ca-certificates curl gpg
 ```
 **Explanation**:
 `apt update` refreshes the list of available packages. `apt upgrade` installs the latest security patches and updates. This prevents conflicts with old packages. The extra tools (`curl`, `gpg`, etc.) are needed later to securely add Kubernetes repositories.
+
 **1.2 Disable swap**
 ```bash
 sudo swapoff -a
@@ -35,6 +40,7 @@ sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 ```
 **Explanation**:
 Kubernetes does **not** work well with swap memory. Swap can cause unpredictable performance and interfere with Kubernetes' memory management (e.g., container OOM killing). `swapoff -a` disables it immediately. Editing `/etc/fstab` comments out the swap line so it stays disabled after reboot.
+
 **1.3 Load kernel modules and configure networking parameters**
 ```bash
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
@@ -54,6 +60,7 @@ sudo sysctl --system
 - `overlay` and `br_netfilter` are kernel modules required for container storage and networking (containerd uses overlay filesystem, and Kubernetes needs bridge networking).
 - `modprobe` loads them now.
 - The `sysctl` settings enable IP forwarding (needed for pods to communicate across nodes) and allow iptables rules to work on bridged traffic. `sysctl --system` applies them immediately and permanently.
+
 **1.4 Install and configure containerd**
 ```bash
 sudo apt install -y containerd
@@ -66,6 +73,7 @@ sudo systemctl enable containerd
 **Explanation**:
 containerd is the container runtime that actually runs your pods. Kubernetes talks to it via CRI (Container Runtime Interface).
 We generate its default config, then change `SystemdCgroup = true` so Kubernetes can properly manage cgroups (resource limits) using systemd (the default on Ubuntu). Finally, restart and enable it to start on boot.
+
 **1.5 Add Kubernetes repository and install tools**
 ```bash
 sudo mkdir -p -m 755 /etc/apt/keyrings
@@ -82,6 +90,8 @@ This adds the official Kubernetes package repository for v1.35. The GPG key ensu
 `kubelet` = agent that runs on every node to manage pods
 `kubectl` = command-line tool to control the cluster
 `apt-mark hold` prevents accidental upgrades that could break the cluster. Enabling kubelet starts it now and on boot.
+
+
 **Step 2: Initialize the Master (Control Plane) Node**
 Run only on the master node:
 ```bash
@@ -92,6 +102,8 @@ Replace `MASTER_IP` with the master's actual IP. If the master has only one netw
 `kubeadm init` sets up the control plane components: API server, etcd (database), controller manager, scheduler, and core DNS.
 `--pod-network-cidr` reserves a IP range for pod networking (Calico will use this exact range by default).
 After it finishes, it prints a `kubeadm join` command — **copy and save it** (you'll need it for workers).
+
+
 **Step 3: Configure kubectl on the Master**
 ```bash
 mkdir -p $HOME/.kube
@@ -100,6 +112,8 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 **Explanation**:
 `kubectl` needs a config file to know how to talk to your cluster's API server. This copies the admin credentials and fixes permissions so your regular user can use `kubectl`.
+
+
 **Step 4: Install Calico Network Plugin** (on Master)
 ```bash
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.3/manifests/tigera-operator.yaml
@@ -113,6 +127,8 @@ Wait for Calico to be ready:
 watch kubectl get tigerastatus
 ```
 All statuses should eventually show `Available`.
+
+
 **Step 5: Join Worker Nodes**
 On **each worker node**, run the `kubeadm join` command you saved from Step 2 (it will look like):
 ```bash
@@ -120,6 +136,8 @@ sudo kubeadm join 192.168.1.10:6443 --token abcdef.1234567890abcdef --discovery-
 ```
 **Explanation**:
 This registers the worker with the master, installs the necessary components, and pulls certificates securely. The token and hash ensure only authorized nodes can join.
+
+
 **Step 6: Verify the Cluster** (on Master)
 ```bash
 kubectl get nodes -o wide
@@ -129,6 +147,8 @@ kubectl get pods -n calico-system
 **Explanation**:
 - `kubectl get nodes` should show all nodes as `Ready`.
 - The kube-system and calico-system pods should all be `Running`.
+
+- 
 **Step 7: Test with a Basic Pod Creation**
 Now let's create a real pod to prove everything works end-to-end.
 On the master node:
@@ -159,4 +179,4 @@ Congratulations! You now have a fully functional Kubernetes v1.35 cluster.
 **Notes**:
 - For production: use multiple control-plane nodes (HA), enable proper firewall rules, and add security hardening.
 - Always refer to official docs for the absolute latest manifests/versions.
-## By [Harshhaa Reddy](https://www.github.com/NotHarshhaa) (Updated January 17, 2026) give this in markdown file
+## By [Sagar Malviya](https://www.github.com/sagarmalviyaa) (Updated January 17, 2026) give this in markdown file
