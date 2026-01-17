@@ -1,0 +1,159 @@
+<h1 id="kubernetes-k8s-step-by-step-installation-guide-on-ubuntu-from-scratch-advanced-edition">Kubernetes (K8s) Step-by-Step Installation Guide on Ubuntu from Scratch (Advanced Edition)</h1>
+<p><img src="https://imgur.com/bKUeyKX.png" alt="k8s">
+Certainly! Here&#39;s an <strong>advanced and fully explained</strong> step-by-step guide to installing Kubernetes (K8s) on Ubuntu from scratch as of January 17, 2026 (Kubernetes v1.35).
+This version uses the modern, recommended approach:</p>
+<ul>
+<li><code>containerd</code> as the container runtime (Docker is deprecated in Kubernetes)</li>
+<li>Official <code>pkgs.k8s.io</code> repositories</li>
+<li>Calico with the Tigera operator as the CNI (network plugin)
+Every command (or group of commands) is followed by a clear, beginner-friendly explanation of <strong>what it does</strong> and <strong>why it&#39;s needed</strong>. The guide is structured to work 100% on a multi-node setup (1 master/control-plane node + 1 or more worker nodes).
+<strong>Prerequisites</strong> (All Nodes)</li>
+</ul>
+<ol>
+<li>Ubuntu 22.04 LTS or 24.04 LTS (clean install recommended)</li>
+<li>At least 2 nodes: 1 master (minimum 2 CPUs, 4 GB RAM) + 1 or more workers (minimum 2 CPUs, 2 GB RAM each)</li>
+<li>Nodes can reach each other over the network (use static IPs if possible)</li>
+<li>Unique hostnames on each node (e.g., <code>master-node</code>, <code>worker-1</code>)</li>
+<li>sudo/root access</li>
+<li>Internet access for downloading packages
+<strong>Recommended</strong>: Set hostnames before starting</li>
+</ol>
+<pre><code class="language-bash"># On master node
+sudo hostnamectl set-hostname master-node
+# On each worker node (use different names)
+sudo hostnamectl set-hostname worker-1
+</code></pre>
+<p><strong>Step 1: Common Setup on ALL Nodes</strong> (Master + Workers)
+<strong>1.1 Update system and install basic tools</strong></p>
+<pre><code class="language-bash">sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo apt install -y apt-transport-https ca-certificates curl gpg
+</code></pre>
+<p><strong>Explanation</strong>:
+<code>apt update</code> refreshes the list of available packages. <code>apt upgrade</code> installs the latest security patches and updates. This prevents conflicts with old packages. The extra tools (<code>curl</code>, <code>gpg</code>, etc.) are needed later to securely add Kubernetes repositories.
+<strong>1.2 Disable swap</strong></p>
+<pre><code class="language-bash">sudo swapoff -a
+sudo sed -i &#39;/ swap / s/^\(.*\)$/#\1/g&#39; /etc/fstab
+</code></pre>
+<p><strong>Explanation</strong>:
+Kubernetes does <strong>not</strong> work well with swap memory. Swap can cause unpredictable performance and interfere with Kubernetes&#39; memory management (e.g., container OOM killing). <code>swapoff -a</code> disables it immediately. Editing <code>/etc/fstab</code> comments out the swap line so it stays disabled after reboot.
+<strong>1.3 Load kernel modules and configure networking parameters</strong></p>
+<pre><code class="language-bash">cat &lt;&lt;EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+sudo modprobe overlay
+sudo modprobe br_netfilter
+cat &lt;&lt;EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+sudo sysctl --system
+</code></pre>
+<p><strong>Explanation</strong>:</p>
+<ul>
+<li><code>overlay</code> and <code>br_netfilter</code> are kernel modules required for container storage and networking (containerd uses overlay filesystem, and Kubernetes needs bridge networking).</li>
+<li><code>modprobe</code> loads them now.</li>
+<li>The <code>sysctl</code> settings enable IP forwarding (needed for pods to communicate across nodes) and allow iptables rules to work on bridged traffic. <code>sysctl --system</code> applies them immediately and permanently.
+<strong>1.4 Install and configure containerd</strong></li>
+</ul>
+<pre><code class="language-bash">sudo apt install -y containerd
+sudo mkdir -p /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml
+sudo sed -i &#39;s/ SystemdCgroup = false/ SystemdCgroup = true/&#39; /etc/containerd/config.toml
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+</code></pre>
+<p><strong>Explanation</strong>:
+containerd is the container runtime that actually runs your pods. Kubernetes talks to it via CRI (Container Runtime Interface).
+We generate its default config, then change <code>SystemdCgroup = true</code> so Kubernetes can properly manage cgroups (resource limits) using systemd (the default on Ubuntu). Finally, restart and enable it to start on boot.
+<strong>1.5 Add Kubernetes repository and install tools</strong></p>
+<pre><code class="language-bash">sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo &#39;deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /&#39; | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo apt update
+sudo apt install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+sudo systemctl enable --now kubelet
+</code></pre>
+<p><strong>Explanation</strong>:
+This adds the official Kubernetes package repository for v1.35. The GPG key ensures packages are authentic.
+<code>kubeadm</code> = cluster bootstrapping tool
+<code>kubelet</code> = agent that runs on every node to manage pods
+<code>kubectl</code> = command-line tool to control the cluster
+<code>apt-mark hold</code> prevents accidental upgrades that could break the cluster. Enabling kubelet starts it now and on boot.
+<strong>Step 2: Initialize the Master (Control Plane) Node</strong>
+Run only on the master node:</p>
+<pre><code class="language-bash">sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=MASTER_IP
+</code></pre>
+<p>Replace <code>MASTER_IP</code> with the master&#39;s actual IP. If the master has only one network interface, you can omit <code>--apiserver-advertise-address</code> (it will auto-detect).
+<strong>Explanation</strong>:
+<code>kubeadm init</code> sets up the control plane components: API server, etcd (database), controller manager, scheduler, and core DNS.
+<code>--pod-network-cidr</code> reserves a IP range for pod networking (Calico will use this exact range by default).
+After it finishes, it prints a <code>kubeadm join</code> command — <strong>copy and save it</strong> (you&#39;ll need it for workers).
+<strong>Step 3: Configure kubectl on the Master</strong></p>
+<pre><code class="language-bash">mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+</code></pre>
+<p><strong>Explanation</strong>:
+<code>kubectl</code> needs a config file to know how to talk to your cluster&#39;s API server. This copies the admin credentials and fixes permissions so your regular user can use <code>kubectl</code>.
+<strong>Step 4: Install Calico Network Plugin</strong> (on Master)</p>
+<pre><code class="language-bash">kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.3/manifests/tigera-operator.yaml
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.3/manifests/custom-resources.yaml
+</code></pre>
+<p><strong>Explanation</strong>:
+Pods can&#39;t communicate without a CNI (Container Network Interface) plugin. Calico provides networking and network policy.
+The first command installs the Tigera operator (manages Calico). The second applies the default configuration, which uses the exact pod CIDR we specified (<code>192.168.0.0/16</code>).
+Wait for Calico to be ready:</p>
+<pre><code class="language-bash">watch kubectl get tigerastatus
+</code></pre>
+<p>All statuses should eventually show <code>Available</code>.
+<strong>Step 5: Join Worker Nodes</strong>
+On <strong>each worker node</strong>, run the <code>kubeadm join</code> command you saved from Step 2 (it will look like):</p>
+<pre><code class="language-bash">sudo kubeadm join 192.168.1.10:6443 --token abcdef.1234567890abcdef --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+</code></pre>
+<p><strong>Explanation</strong>:
+This registers the worker with the master, installs the necessary components, and pulls certificates securely. The token and hash ensure only authorized nodes can join.
+<strong>Step 6: Verify the Cluster</strong> (on Master)</p>
+<pre><code class="language-bash">kubectl get nodes -o wide
+kubectl get pods -n kube-system
+kubectl get pods -n calico-system
+</code></pre>
+<p><strong>Explanation</strong>:</p>
+<ul>
+<li><code>kubectl get nodes</code> should show all nodes as <code>Ready</code>.</li>
+<li>The kube-system and calico-system pods should all be <code>Running</code>.
+<strong>Step 7: Test with a Basic Pod Creation</strong>
+Now let&#39;s create a real pod to prove everything works end-to-end.
+On the master node:</li>
+</ul>
+<pre><code class="language-bash"># Create a simple Nginx pod
+kubectl create deployment nginx-test --image=nginx --replicas=2
+# Watch the pods come up
+kubectl get pods -w
+# Check details
+kubectl get pods -o wide
+kubectl get deployments
+kubectl describe deployment nginx-test
+# (Optional) Expose it to test access
+kubectl expose deployment nginx-test --port=80 --type=NodePort
+kubectl get services
+# Note the NodePort (e.g., 3XXXX), then access http://WORKER_IP:NODEPORT from your browser
+# Clean up when done
+kubectl delete deployment nginx-test
+kubectl delete service nginx-test
+</code></pre>
+<p><strong>Explanation of the test</strong>:</p>
+<ul>
+<li><code>kubectl create deployment</code> creates a Deployment object that manages 2 replicas of an Nginx container.</li>
+<li>The scheduler places the pods on available nodes (usually workers).</li>
+<li>When pods are <code>Running</code>, it means: control plane → kubelet → containerd → networking all work.</li>
+<li><code>get pods -o wide</code> shows which node each pod runs on.</li>
+<li>Exposing as NodePort lets you access the app from outside to confirm networking.
+Congratulations! You now have a fully functional Kubernetes v1.35 cluster.
+<strong>Notes</strong>:</li>
+<li>For production: use multiple control-plane nodes (HA), enable proper firewall rules, and add security hardening.</li>
+<li>Always refer to official docs for the absolute latest manifests/versions.</li>
+</ul>
+<h2 id="by-harshhaa-reddy-updated-january-17-2026-give-this-in-markdown-file">By <a href="https://www.github.com/NotHarshhaa">Harshhaa Reddy</a> (Updated January 17, 2026) give this in markdown file</h2>
